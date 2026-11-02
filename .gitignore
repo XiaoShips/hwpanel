@@ -1,0 +1,27 @@
+# 构建产物
+/build/
+/dist/
+/release/
+__pycache__/
+*.pyc
+HWPanel.spec
+
+# 第三方安装包不在仓库里再分发，构建时自行下载
+/packaging/redist/
+
+# 本机调试与个人脚本
+.workbuddy/
+_*.py
+_*.txt
+_*.png
+fanctl.py
+thermal_retest.py
+panel.ico
+启动硬件面板.vbs
+调试启动.bat
+
+# 运行期配置
+.hwpanel.json
+
+# 早期设计稿与过程截图，只在本地留档
+/预览_*.png

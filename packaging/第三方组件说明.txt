@@ -1,0 +1,27 @@
+﻿本安装包包含以下第三方组件：
+
+1. LibreHardwareMonitorLib 0.9.6（安装目录 \_internal\tools\lhm）
+   许可证：Mozilla Public License 2.0 (MPL-2.0)
+   项目主页：https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+   sensors.exe 为本项目对 LHM 的封装，仅在本地读取硬件传感器。
+   同目录一并分发其依赖，均保持上游原样未作修改：
+     HidSharp 2.6.4            Apache-2.0  https://github.com/SeekHisKingdom/HIDSharp
+     BlackSharp.Core 1.0.7     MPL-2.0     https://github.com/Blacktempel/BlackSharp
+     DiskInfoToolkit 1.1.2     MPL-2.0     https://github.com/Blacktempel/DiskInfoToolkit
+     RAMSPDToolkit-NDD 1.4.2   MPL-2.0     https://github.com/Blacktempel/RAMSPDToolkit
+     Microsoft.Bcl.HashCode 等 MIT         https://github.com/dotnet/runtime
+
+2. PawnIO 2.2.0（可选安装，安装包内 redist\PawnIO_setup.exe）
+   许可证：GNU General Public License v2.0 (GPL-2.0)
+   项目主页：https://github.com/namazso/PawnIO
+   官网：https://pawnio.eu
+   由 namazso 签名的内核驱动，用于访问 CPU MSR 与主板 Super I/O。
+   安装包原样分发，未作修改；完整源码见上述项目主页。
+
+3. Python 3.11 / Tcl-Tk / psutil / pywin32 / PyInstaller
+   许可证：PSF License / BSD / BSD / PSF / GPL-2.0（bootloader 例外）
+   https://www.python.org/
+   https://www.tcl.tk/
+   https://github.com/giampaolo/psutil
+   https://github.com/mhammond/pywin32
+   https://pyinstaller.org/
