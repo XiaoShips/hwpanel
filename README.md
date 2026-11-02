@@ -1,14 +1,14 @@
-# 硬件监控面板 (HWPanel)
+# TempPeek
 
 一个 Windows 桌面悬浮硬件监控面板：常驻置顶、可拖动、只读、不联网。
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20x64-blue)
 ![release](https://img.shields.io/badge/release-v2.1-brightgreen)
-![downloads](https://img.shields.io/github/downloads/XiaoShips/hwpanel/total)
+![downloads](https://img.shields.io/github/downloads/XiaoShips/tempeek/total)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11-yellow)
 
-> 下载：[Releases](https://github.com/XiaoShips/hwpanel/releases) 里的 `HWPanel-Setup-v2.1.exe`（约 16 MB）
+> 下载：[Releases](https://github.com/XiaoShips/tempeek/releases) 里的 `TempPeek-Setup-v2.1.exe`（约 16 MB）
 
 | 完整模式 | 迷你模式 |
 | :-: | :-: |
@@ -32,7 +32,7 @@
 - **右键**打开菜单：刷新间隔、透明度、置顶、平滑刷新、退出
 - **`Esc`** 退出
 - 单实例：重复启动只会把已有面板提到前台
-- 偏好保存在 `%USERPROFILE%\.hwpanel.json`，删掉即恢复默认
+- 偏好保存在 `%USERPROFILE%\.tempeek.json`，删掉即恢复默认
 
 ## 驱动与管理员权限
 
@@ -82,7 +82,7 @@ CPU 温度和风扇转速不在 Windows 的标准接口里，需要读取 MSR �
 ```bash
 # Python 3.11（自带 tkinter）
 pip install -r requirements.txt
-python hwpanel.py
+python tempeek.py
 ```
 
 `tools/lhm/` 里已附带编译好的 `sensors.exe`（对 LibreHardwareMonitorLib 的薄封装，源码 `sensors.cs` 同目录）。想自己编译：
@@ -99,13 +99,13 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe -nologo `
 packaging\build.bat
 ```
 
-依次做三件事：生成图标 → PyInstaller onedir 打成 `dist\HWPanel\` → Inno Setup 编译 `packaging\installer.iss` 输出到 `release\`。
+依次做三件事：生成图标 → PyInstaller onedir 打成 `dist\TempPeek\` → Inno Setup 编译 `packaging\installer.iss` 输出到 `release\`。
 
 构建安装包前需要把 [PawnIO 2.2.0](https://github.com/namazso/PawnIO/releases) 的 `PawnIO_setup.exe` 放到 `packaging\redist\`（该驱动不在本仓库里再分发）。
 
 ## 版本历史
 
-见 [CHANGELOG.md](CHANGELOG.md)，安装包随各 [Release](https://github.com/XiaoShips/hwpanel/releases) 提供。
+见 [CHANGELOG.md](CHANGELOG.md)，安装包随各 [Release](https://github.com/XiaoShips/tempeek/releases) 提供。
 
 ## 第三方组件
 

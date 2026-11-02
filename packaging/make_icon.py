@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""生成 HWPanel 应用图标（packaging/icon.ico）。"""
+"""生成 TempPeek 应用图标（packaging/icon.ico）。"""
 import math
 import os
 

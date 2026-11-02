@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-hwpanel.py —— Windows 桌面硬件监控悬浮面板
+TempPeek —— Windows 桌面硬件监控悬浮面板
 
 针对本机 Dell G3 3590 (i7-9750H + GTX 1660 Ti Max-Q) 实测适配，其他机型可降级运行。
 
@@ -41,9 +41,9 @@ import threading
 import time
 import tkinter as tk
 
-APP_NAME = "硬件监控面板"
+APP_NAME = "TempPeek"
 APP_VER = "2.1"
-CFG_PATH = os.path.join(os.path.expanduser("~"), ".hwpanel.json")
+CFG_PATH = os.path.join(os.path.expanduser("~"), ".tempeek.json")
 CREATE_NO_WINDOW = 0x08000000
 
 
@@ -159,7 +159,7 @@ def relaunch_elevated():
 
 
 # ────────────────────── 单实例：双击两次只开一个面板 ──────────────────────
-_MUTEX_NAME = "HWPanel_SingleInstance_v1"
+_MUTEX_NAME = "TempPeek_SingleInstance_v1"
 _mutex_handle = None
 
 
@@ -841,7 +841,7 @@ class Panel:
         # 标题栏：状态点 / 标题 / 副标题 / 12 小时制时钟
         self.it["dot"] = cv.create_oval(P - 8, 12, P - 3, 17,
                                         fill=C["green"], outline="")
-        self._text(P, 14, "硬件监控", fill=C["text"], font=self.F_TITLE)
+        self._text(P, 14, "TempPeek", fill=C["text"], font=self.F_TITLE)
         self.it["hdr_state"] = self._text(
             P + 92, 15, "", fill=C["faint"], font=self.F_TINY)
         self.it["clock"] = cv.create_text(

@@ -1,5 +1,5 @@
 // sensors.exe —— LibreHardwareMonitor 采样助手
-// 由 hwpanel.py 以管理员身份拉起，stdout 每秒输出一行 JSON。
+// 由 tempeek.py 以管理员身份拉起，stdout 每秒输出一行 JSON。
 // 需要系统已安装 PawnIO（https://pawnio.eu）才能读取 Intel CPU MSR 与主板 Super I/O。
 using System;
 using System.Collections.Generic;

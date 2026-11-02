@@ -1,11 +1,11 @@
 ﻿; =====================================================================
-;  硬件监控面板 安装脚本（Inno Setup 6）
+;  TempPeek 安装脚本（Inno Setup 6）
 ;  构建：ISCC.exe packaging\installer.iss
 ; =====================================================================
-#define AppName "硬件监控面板"
+#define AppName "TempPeek"
 #define AppVersion "2.1"
-#define AppPublisher "HWPanel"
-#define AppExe "HWPanel.exe"
+#define AppPublisher "TempPeek"
+#define AppExe "TempPeek.exe"
 
 [Setup]
 AppId={{8C4F2A1E-7D3B-4E62-9F5A-3B1C0D9E8A21}
@@ -14,14 +14,14 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
 AppComments=Windows 桌面硬件监控悬浮面板
-DefaultDirName={autopf}\HWPanel
+DefaultDirName={autopf}\TempPeek
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
-AppMutex=HWPanel_SingleInstance_v1
+AppMutex=TempPeek_SingleInstance_v1
 OutputDir=..\release
-OutputBaseFilename=HWPanel-Setup-v2.1
+OutputBaseFilename=TempPeek-Setup-v2.1
 SetupIconFile=icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -45,8 +45,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Name: "driver"; Description: "安装 PawnIO 传感器驱动（CPU 温度 / 风扇转速，可卸载）"; GroupDescription: "传感器驱动："; Flags: checkedonce
 
 [Files]
-Source: "..\dist\HWPanel\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\HWPanel\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\TempPeek\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\TempPeek\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "使用说明.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "第三方组件说明.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "redist\PawnIO_setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: driver; Check: WantDriver
