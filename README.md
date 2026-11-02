@@ -8,7 +8,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11-yellow)
 
-> 下载：[Releases](https://github.com/XiaoShips/hwpanel/releases) 里的 `硬件监控面板_安装包_v2.1.exe`（约 16 MB）
+> 下载：[Releases](https://github.com/XiaoShips/hwpanel/releases) 里的 `HWPanel-Setup-v2.1.exe`（约 16 MB）
 
 | 完整模式 | 迷你模式 |
 | :-: | :-: |
