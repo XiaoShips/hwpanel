@@ -44,6 +44,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import tkinter as tk
 import tkinter.messagebox as messagebox
 import tkinter.simpledialog as simpledialog
@@ -62,6 +63,7 @@ def _app_root():
 
 
 HERE = _app_root()
+FROZEN = getattr(sys, "frozen", False)   # PyInstaller 打包运行时为 True
 CFG_PATH = os.path.join(os.path.expanduser("~"), ".tempeek.json")
 CREATE_NO_WINDOW = 0x08000000
 
@@ -159,16 +161,18 @@ def relaunch_elevated():
     if "--elevated" in sys.argv:
         return False
     args = [a for a in sys.argv[1:] if a != "--elevated"]
-    params = " ".join('"%s"' % a if " " in a else a for a in args)
-    if params:
-        params = '"%s" %s --elevated' % (os.path.abspath(__file__), params)
-    else:
-        params = '"%s" --elevated' % os.path.abspath(__file__)
+    argv = args + ["--elevated"]
+    if not FROZEN:
+        # 源码运行要把脚本路径当第一个参数；打包后程序体就是 exe 自己，不能再传
+        argv.insert(0, os.path.abspath(__file__))
+    params = " ".join('"%s"' % a if " " in a else a for a in argv)
     try:
         # nShow=0（SW_HIDE）：venv 里的 pythonw.exe 其实是控制台子系统，
-        # 用 1 会闪出一个黑框；隐藏后进程照常运行，Tk 窗口自己会显示
+        # 用 1 会闪出一个黑框；隐藏后进程照常运行，Tk 窗口自己会显示。
+        # 打包后的 exe 是 GUI 子系统，必须用 1，否则主窗口可能不显示。
+        show = 1 if FROZEN else 0
         rc = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", windowless_exe(), params, HERE, 0)
+            None, "runas", windowless_exe(), params, HERE, show)
         return rc > 32
     except Exception:
         return False
@@ -952,6 +956,9 @@ class UpdateChecker:
 
     def download(self, target=None):
         """下载 → 内容校验 → 语法编译 → 备份 → 原子替换。失败时不动原文件。"""
+        if FROZEN:
+            # 安装版的程序体在 exe/_internal 里，替换脚本不会生效，也不该去动
+            raise RuntimeError("安装版请下载新版安装包，不支持原地覆盖")
         if not self.repo or not self.info:
             raise RuntimeError("没有可用的更新信息")
         path = self.info.get("file") or SELF_FILE
@@ -1483,10 +1490,25 @@ class Panel:
         if status == "new":
             self.update_state = ("new", str(info))
             detail = self.updater.info or {}
+            changelog = detail.get("changelog") or "无更新说明"
+            if FROZEN:
+                msg = ("当前版本 v%s\n最新版本 v%s\n\n%s\n\n"
+                       "这是安装版，请到 Releases 页面下载新版安装包覆盖安装。\n"
+                       "是否现在打开下载页？" % (APP_VER, info, changelog))
+                if messagebox.askyesno("发现新版本", msg, parent=self.root):
+                    try:
+                        import webbrowser
+                        webbrowser.open("https://github.com/%s/releases/latest"
+                                        % self.updater.repo)
+                    except Exception:
+                        pass
+                else:
+                    self._toast("发现新版本 " + str(info), C["yellow"])
+                return
             msg = ("当前版本 v%s\n最新版本 v%s\n\n%s\n\n"
                    "是否立即下载并更新？\n"
                    "更新前会备份为 tempeek.py.bak，完成后需重启面板。"
-                   % (APP_VER, info, detail.get("changelog") or "无更新说明"))
+                   % (APP_VER, info, changelog))
             if messagebox.askyesno("发现新版本", msg, parent=self.root):
                 self._do_update()
             else:
@@ -1562,11 +1584,16 @@ class Panel:
                     C["green"] if self.updater.auto else C["dim"])
 
     def _restart(self):
-        """execv 原地重启：保持提权令牌与互斥量语义，不产生第二个实例。"""
+        """原地重启：源码版用 execv 保持令牌；安装版直接重新拉起 exe。"""
         self._save_cfg()
+        argv = [a for a in sys.argv[1:] if a != "--elevated"]
         try:
-            os.execv(sys.executable,
-                     [sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
+            if FROZEN:
+                # 打包后 __file__ 指向解包目录里不存在的脚本，不能当参数传
+                os.execv(sys.executable, [sys.executable] + argv)
+            else:
+                os.execv(sys.executable,
+                         [sys.executable, os.path.abspath(__file__)] + argv)
         except Exception as exc:
             self._toast("重启失败：" + str(exc)[:30], C["red"])
 
@@ -1835,7 +1862,50 @@ class Panel:
                               text="最高 %.0f°C" % max(vals), fill=C["dim"])
 
 
+_CRASH_LOG = None
+
+
+def _log(msg):
+    """启动轨迹与异常都写同一个文件，打包后排查用。"""
+    if not _CRASH_LOG:
+        return
+    try:
+        with open(_CRASH_LOG, "a", encoding="utf-8") as fh:
+            fh.write("[%s] %s\n" % (time.strftime("%m-%d %H:%M:%S"), msg))
+    except Exception:
+        pass
+
+
+def _install_crash_log():
+    """把未捕获异常写进 %TEMP%\\tempeek-crash.log。
+    打包成 exe 后没有控制台，崩溃只有靠这个文件才能查。"""
+    path = os.path.join(os.environ.get("TEMP") or os.path.expanduser("~"),
+                        "tempeek-crash.log")
+
+    def hook(exc_type, exc, tb):
+        try:
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write("[%s] frozen=%s argv=%s\n"
+                         % (time.strftime("%Y-%m-%d %H:%M:%S"), FROZEN,
+                            sys.argv))
+                fh.write("".join(traceback.format_exception(exc_type, exc, tb)))
+                fh.write("\n")
+        except Exception:
+            pass
+
+    sys.excepthook = hook
+    try:
+        threading.excepthook = lambda a: hook(a.exc_type, a.exc_value,
+                                               a.exc_traceback)
+    except Exception:
+        pass
+    return path
+
+
 def main():
+    global _CRASH_LOG
+    _CRASH_LOG = _install_crash_log()
+    _log("start frozen=%s admin=%s argv=%s" % (FROZEN, is_admin(), sys.argv))
     # 开启 DPI 感知：否则在 125%/150% 缩放下窗口会被系统位图拉伸而变模糊
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -1844,17 +1914,22 @@ def main():
 
     # 非管理员则静默提权重启；失败也继续（降级模式）
     if not is_admin() and "--no-elevate" not in sys.argv:
-        if relaunch_elevated():
+        ok = relaunch_elevated()
+        _log("relaunch_elevated -> %s" % ok)
+        if ok:
             return 0
 
     # 单实例：提权之后再抢互斥量，避免父进程与提权子进程互相顶掉
     if not acquire_single_instance():
+        _log("single-instance blocked, exit")
         return 0
+    _log("mutex acquired")
 
     sampler = Sampler(interval=1.5)
     sampler.start()
 
     panel = Panel(sampler)
+    _log("panel ready")
     try:
         panel.root.mainloop()
     except KeyboardInterrupt:
