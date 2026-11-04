@@ -3,7 +3,7 @@
 ;  构建：ISCC.exe packaging\installer.iss
 ; =====================================================================
 #define AppName "TempPeek"
-#define AppVersion "2.1"
+#define AppVersion "2.2.0"
 #define AppPublisher "TempPeek"
 #define AppExe "TempPeek.exe"
 
@@ -21,7 +21,7 @@ UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 AppMutex=TempPeek_SingleInstance_v1
 OutputDir=..\release
-OutputBaseFilename=TempPeek-Setup-v2.1
+OutputBaseFilename=TempPeek-Setup-v2.2.0
 SetupIconFile=icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -31,7 +31,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 ShowLanguageDialog=no
-VersionInfoVersion=2.1.0.0
+VersionInfoVersion=2.2.0.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription={#AppName} 安装程序
 VersionInfoProductName={#AppName}
