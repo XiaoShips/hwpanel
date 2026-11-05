@@ -1,6 +1,7 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "date": "2026-11-05",
   "file": "tempeek.py",
-  "changelog": "风扇数量自动探测（1-6 路），面板高度随风扇数伸缩；修复首屏出数慢与刷新定时器重复挂载；保留 CPU 频率上限与版本更新"
+  "zip": "TempPeek-v2.2.1-portable.zip",
+  "changelog": "安装版支持原地自动更新：勾选更新后自动下载整包、替换安装目录文件并重启，不再需要手动去 Releases 下载安装包"
 }

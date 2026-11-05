@@ -2,6 +2,27 @@
 
 本文件记录值得注意的变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## v2.2.1 - 2026-11-05
+
+### 新增
+
+- **安装版 / 便携版支持原地自动更新**：勾选更新后程序自己下载整包、覆盖安装目录并重启，
+  不再需要手动到 Releases 下载安装包覆盖安装
+- 更新包地址三级回退：`version.json` 的 `zip` 字段 → 约定的 Release 资产名 →
+  Releases API 的 zip 资产（且校验 latest 的 tag 与目标版本一致，避免装回旧版）
+- 解压前拒绝含 `..` 或绝对路径的压缩包条目；解压后校验 `TempPeek.exe` 的 PE 头与体积
+- 替换日志写入 `%TEMP%\tempeek-update.log`，失败时可直接看 robocopy 的实际原因
+
+### 修复
+
+- `_http` 只把 `http/https` 当绝对地址，其它协议（如 `file://`）会被误拼成仓库相对路径
+- 更新脚本改成经由命令行参数接收路径：路径含中文时不能再写进 ASCII 批处理
+
+### 变更
+
+- 安装目录新增 `APP_DIR` 概念（onedir 下 `HERE` 指向 `_internal`，两者不能混用）
+- 右键菜单的更新流程在安装版上从“打开下载页”改为“下载并重启”
+
 ## v2.2.0 - 2026-11-05
 
 ### 新增

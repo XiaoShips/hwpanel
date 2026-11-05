@@ -1,6 +1,6 @@
 # 构建产物
-/build/
-/dist/
+/build*/
+/dist*/
 /release/
 __pycache__/
 *.pyc

@@ -42,16 +42,16 @@ import queue
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
-import tkinter as tk
-import tkinter.messagebox as messagebox
-import tkinter.simpledialog as simpledialog
 import urllib.request
+import zipfile
 
 APP_NAME = "TempPeek"
-APP_VER = "2.2.0"
+APP_VER = "2.2.1"
+EXE_NAME = "TempPeek.exe"       # 打包后的主程序名；注意小写是 temppeek（两个 p）
 
 
 def _app_root():
@@ -64,8 +64,49 @@ def _app_root():
 
 HERE = _app_root()
 FROZEN = getattr(sys, "frozen", False)   # PyInstaller 打包运行时为 True
+# 安装目录（可写、可被原地替换的那一层）：源码版是脚本目录，
+# 打包版是 exe 所在目录——注意不是 HERE，onedir 下 HERE 指的是 _internal。
+APP_DIR = (os.path.dirname(os.path.abspath(sys.executable))
+           if FROZEN else HERE)
 CFG_PATH = os.path.join(os.path.expanduser("~"), ".tempeek.json")
 CREATE_NO_WINDOW = 0x08000000
+
+
+def _fix_tk_env(wait=8.0):
+    """指明 Tcl/Tk 的数据目录，别让 Tk 自己去猜。
+
+    onedir 打包后 Tcl 脚本在 _internal/_tcl_data、Tk 脚本在 _internal/_tk_data。
+    拿不到 TK_LIBRARY 时 Tk 会退回到 “TCL_LIBRARY/tk8.6” 这类路径，找不到
+    tk.tcl 就直接 TclError 崩溃。
+
+    安装程序是异步的：exe 落地后其余文件可能还在写，因此这里最多等 wait 秒，
+    等数据目录就位再继续，避免“装完立刻双击”必崩。
+    """
+    if not FROZEN:
+        return True
+    pairs = (("TCL_LIBRARY", "_tcl_data", "init.tcl"),
+             ("TK_LIBRARY", "_tk_data", "tk.tcl"))
+    deadline = time.time() + max(0.0, wait)
+    while True:
+        missing = []
+        for env, sub, probe in pairs:
+            d = os.path.join(HERE, sub)
+            if os.path.isfile(os.path.join(d, probe)):
+                os.environ[env] = d
+            else:
+                missing.append(sub)
+        if not missing:
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.25)
+
+
+_fix_tk_env()
+
+import tkinter as tk
+import tkinter.messagebox as messagebox
+import tkinter.simpledialog as simpledialog
 
 # 风扇一栏最多显示几行。超过这个数量的接口多半是驱动把同一路信号重复上报，
 # 面板不应无限拉长；1-6 已经覆盖笔记本（1-2）到台式机/工作站（3-6）的常见形态。
@@ -172,7 +213,7 @@ def relaunch_elevated():
         # 打包后的 exe 是 GUI 子系统，必须用 1，否则主窗口可能不显示。
         show = 1 if FROZEN else 0
         rc = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", windowless_exe(), params, HERE, show)
+            None, "runas", windowless_exe(), params, APP_DIR, show)
         return rc > 32
     except Exception:
         return False
@@ -887,6 +928,99 @@ def detect_repo(here):
         return ""
 
 
+def dir_writable(path):
+    """用 CreateFileW 以写权限打开目录，走真实 ACL 判定。
+
+    os.access 在 Windows 只看只读属性，对 Program Files 会误判为可写。
+    """
+    try:
+        k32 = ctypes.windll.kernel32
+        k32.CreateFileW.restype = ctypes.c_void_p
+        k32.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32,
+                                    ctypes.c_uint32, ctypes.c_void_p,
+                                    ctypes.c_uint32, ctypes.c_uint32,
+                                    ctypes.c_void_p]
+        h = k32.CreateFileW(path, 0x40000000, 7, None, 3, 0x02000000, None)
+        if not h or h in (0xFFFFFFFFFFFFFFFF, 0xFFFFFFFF):
+            return False
+        k32.CloseHandle(ctypes.c_void_p(h))
+        return True
+    except Exception:
+        return True          # 判定不了就放行，让替换脚本自己报错
+
+
+def extract_package(zip_path, out_dir):
+    """解压更新包，返回含 TempPeek.exe 的那层目录；不合格返回 None。"""
+    with zipfile.ZipFile(zip_path) as zf:
+        for name in zf.namelist():
+            parts = name.replace("\\", "/").split("/")
+            if name.startswith(("/", "\\")) or ".." in parts:
+                raise RuntimeError("压缩包含非法路径")
+        zf.extractall(out_dir)
+    for root, _dirs, files in os.walk(out_dir):
+        for f in files:
+            if f.lower() != EXE_NAME.lower():
+                continue
+            p = os.path.join(root, f)
+            try:
+                with open(p, "rb") as fh:
+                    magic = fh.read(2)
+            except Exception:
+                continue
+            if magic == b"MZ" and os.path.getsize(p) > 64 * 1024:
+                return root
+    return None
+
+
+# 替换脚本：纯 ASCII + CRLF。本机 cmd 按 GBK 解析，脚本里不能出现任何中文，
+# 路径一律通过命令行参数传入，避免把非 ASCII 字符写进 .cmd 文件。
+#
+# 正在运行的 exe 不能直接覆盖（映像被占用），标准做法是先重命名再落新文件：
+# 失败的 robocopy 会整体重试，直到 exe 就位且没有复制错误为止。
+UPDATE_CMD = r"""@echo off
+setlocal enableextensions
+rem TempPeek self-update helper (generated, do not edit)
+set "SRC=%~1"
+set "DST=%~2"
+set "EXE=%~3"
+set "LOG=%~4"
+set "OLD=%EXE%.old"
+>"%LOG%" echo [update] helper start
+>>"%LOG%" echo [update] src=%SRC%
+>>"%LOG%" echo [update] dst=%DST%
+set /a TRY=0
+:retry
+if exist "%OLD%" del /f /q "%OLD%" >nul 2>&1
+if exist "%EXE%" move /y "%EXE%" "%OLD%" >nul 2>&1
+robocopy "%SRC%" "%DST%" /E /R:0 /W:0 /NFL /NDL /NJH /NJS /NP >>"%LOG%" 2>&1
+set RC=%ERRORLEVEL%
+>>"%LOG%" echo [update] try=%TRY% rc=%RC%
+if %RC% LSS 8 if exist "%EXE%" goto done
+set /a TRY+=1
+if %TRY% GEQ 40 goto fail
+ping -n 2 127.0.0.1 >nul
+goto retry
+:fail
+>>"%LOG%" echo [update] FAILED after retries
+:done
+if exist "%EXE%" (
+  start "" "%EXE%"
+  >>"%LOG%" echo [update] relaunched
+) else (
+  >>"%LOG%" echo [update] ERROR exe not found
+)
+ping -n 3 127.0.0.1 >nul
+if exist "%OLD%" del /f /q "%OLD%" >nul 2>&1
+>>"%LOG%" echo [update] finished
+exit /b 0
+"""
+
+
+def write_update_cmd(path):
+    with open(path, "w", encoding="ascii", newline="\r\n") as fh:
+        fh.write(UPDATE_CMD)
+
+
 class UpdateChecker:
     """检查 GitHub 版本清单，并在用户确认后安全替换主程序文件。
 
@@ -902,6 +1036,7 @@ class UpdateChecker:
         self.branch = (cfg.get("branch") or DEFAULT_BRANCH).strip()
         self.auto = bool(cfg.get("auto_check_update", True))
         self.info = None
+        self.package = None        # 最近一次成功下载的整包信息
         self.error = ""
 
     def _http(self, url, timeout=None):
@@ -936,6 +1071,7 @@ class UpdateChecker:
                     "date": str(data.get("date", "")),
                     "changelog": str(data.get("changelog", "")),
                     "file": str(data.get("file", SELF_FILE)),
+                    "zip": str(data.get("zip", "")),
                 }
                 return ("new" if ver_newer(ver, APP_VER) else "same"), ver
             except Exception as exc:
@@ -954,11 +1090,104 @@ class UpdateChecker:
             self.error = "清单:%s / Release:%s" % (last, exc2)
             return "error", self.error
 
+    # ── 安装版：整包下载 → 原地覆盖 → 自动重启 ──
+    PKG_TIMEOUT = 150
+
+    def _asset_urls(self, ver, name):
+        base = "https://github.com/%s/releases/download/%%s/%s" % (self.repo, name)
+        return [base % ("v" + ver), base % ver]
+
+    def _api_zip_urls(self, ver):
+        try:
+            d = json.loads(self._http(
+                UPDATE_API.format(repo=self.repo)).decode("utf-8"))
+        except Exception:
+            return []
+        if str(d.get("tag_name") or "").strip().lstrip("vV") != ver:
+            return []        # latest 不是目标版本，宁可不更新也别装回旧版
+        out = []
+        for a in d.get("assets") or []:
+            if (str(a.get("name", "")).lower().endswith(".zip")
+                    and a.get("browser_download_url")):
+                out.append(a["browser_download_url"])
+        return out
+
+    def resolve_package_urls(self, ver=None):
+        """候选整包地址：显式字段 → 约定的 Release 资产 → Releases API。"""
+        ver = str(ver or (self.info or {}).get("version") or "").strip().lstrip("vV")
+        if not ver or not self.repo:
+            raise RuntimeError("没有可用的版本信息")
+        urls = []
+
+        def add(u):
+            u = (u or "").strip()
+            if u and u not in urls:
+                urls.append(u)
+
+        z = str((self.info or {}).get("zip") or "").strip()
+        if z:
+            if "://" in z:                 # 完整 URL（http/https/file 等）
+                add(z)
+            elif "/" in z:
+                add(UPDATE_RAW.format(repo=self.repo, branch=self.branch, path=z))
+            else:
+                for u in self._asset_urls(ver, z):
+                    add(u)
+        for u in self._asset_urls(ver, "TempPeek-v%s-portable.zip" % ver):
+            add(u)
+        for u in self._api_zip_urls(ver):
+            add(u)
+        return urls
+
+    def fetch_package(self, dest=None):
+        """下载整包并解压，返回 (版本号, 含 TempPeek.exe 的目录)。"""
+        ver = str((self.info or {}).get("version") or "").strip().lstrip("vV")
+        urls = self.resolve_package_urls(ver)
+        dest = dest or tempfile.mkdtemp(prefix="tempeek-update-")
+        os.makedirs(dest, exist_ok=True)
+        last = ""
+        for url in urls:
+            try:
+                raw = self._http(url, timeout=self.PKG_TIMEOUT)
+                if len(raw) < (1 << 20):
+                    raise RuntimeError("包体过小 (%d 字节)" % len(raw))
+                zip_path = os.path.join(dest, "package.zip")
+                with open(zip_path, "wb") as fh:
+                    fh.write(raw)
+                root = extract_package(zip_path, os.path.join(dest, "new"))
+                if not root:
+                    raise RuntimeError("包内未找到 TempPeek.exe")
+                self.package = {"version": ver, "zip": zip_path,
+                                "src": root, "url": url}
+                return ver, root
+            except Exception as exc:
+                last = "%s" % exc
+        raise RuntimeError((last or "没有可用的更新包地址")[:70])
+
+    def launch_replacer(self, src_dir, dest_dir=None, exe=None):
+        """生成并启动替换脚本。调用方随后退出本进程即完成覆盖。"""
+        dest_dir = os.path.abspath(dest_dir or APP_DIR)
+        exe = os.path.abspath(exe or sys.executable)
+        if not os.path.isdir(dest_dir):
+            raise RuntimeError("找不到安装目录")
+        if not dir_writable(dest_dir):
+            raise RuntimeError("安装目录不可写，请以管理员身份运行后再更新")
+        log = os.path.join(os.environ.get("TEMP") or os.path.expanduser("~"),
+                           "tempeek-update.log")
+        script = os.path.join(os.path.dirname(os.path.abspath(src_dir)),
+                              "apply.cmd")
+        write_update_cmd(script)
+        # 参数必须走命令行：路径里可能有中文，写进 ASCII 脚本会乱码
+        subprocess.Popen(["cmd.exe", "/c", script, src_dir, dest_dir, exe, log],
+                         cwd=os.path.dirname(script),
+                         creationflags=CREATE_NO_WINDOW, close_fds=True)
+        return script, log
+
     def download(self, target=None):
-        """下载 → 内容校验 → 语法编译 → 备份 → 原子替换。失败时不动原文件。"""
+        """源码版：下载 → 内容校验 → 语法编译 → 备份 → 原子替换。"""
         if FROZEN:
-            # 安装版的程序体在 exe/_internal 里，替换脚本不会生效，也不该去动
-            raise RuntimeError("安装版请下载新版安装包，不支持原地覆盖")
+            # 安装版的程序体在 exe/_internal 里，改脚本不会生效
+            raise RuntimeError("当前为安装版，请用整包更新")
         if not self.repo or not self.info:
             raise RuntimeError("没有可用的更新信息")
         path = self.info.get("file") or SELF_FILE
@@ -1493,15 +1722,12 @@ class Panel:
             changelog = detail.get("changelog") or "无更新说明"
             if FROZEN:
                 msg = ("当前版本 v%s\n最新版本 v%s\n\n%s\n\n"
-                       "这是安装版，请到 Releases 页面下载新版安装包覆盖安装。\n"
-                       "是否现在打开下载页？" % (APP_VER, info, changelog))
+                       "是否立即下载并更新？\n"
+                       "程序会下载整包（约 16 MB），覆盖安装目录里的文件，"
+                       "然后自动重启。用户配置与快捷方式不受影响。"
+                       % (APP_VER, info, changelog))
                 if messagebox.askyesno("发现新版本", msg, parent=self.root):
-                    try:
-                        import webbrowser
-                        webbrowser.open("https://github.com/%s/releases/latest"
-                                        % self.updater.repo)
-                    except Exception:
-                        pass
+                    self._do_pkg_update()
                 else:
                     self._toast("发现新版本 " + str(info), C["yellow"])
                 return
@@ -1526,6 +1752,9 @@ class Panel:
             self._toast("检查失败：" + str(info)[:36], C["red"])
 
     def _do_update(self):
+        if FROZEN:
+            self._do_pkg_update()
+            return
         self._toast("正在下载更新…", C["blue"])
 
         def work():
@@ -1544,6 +1773,50 @@ class Panel:
             "已更新主程序：\n%s\n\n原文件已备份为：\n%s\n\n"
             "请点右键「重启面板」或重新双击启动器使新版本生效。"
             % (target, bak), parent=self.root)
+
+    def _do_pkg_update(self):
+        """安装版更新：后台下载整包 → 生成替换脚本 → 退出进程交给脚本。"""
+        self._toast("正在下载更新包…", C["blue"])
+
+        def work():
+            try:
+                ver, src = self.updater.fetch_package()
+                self._post(self._on_pkg_ready, ver, src)
+            except Exception as exc:
+                self._post(self._toast, "更新失败：" + str(exc)[:40], C["red"])
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_pkg_ready(self, ver, src):
+        try:
+            script, log = self.updater.launch_replacer(src)
+        except Exception as exc:
+            self._toast("无法替换：" + str(exc)[:36], C["red"])
+            return
+        _log("update staged ver=%s script=%s" % (ver, script))
+        self._toast("正在替换文件 · 面板将自动重启", C["green"])
+        self.root.after(600, self._quit_for_update)
+
+    def _quit_for_update(self):
+        """先落盘配置再退出，替换脚本等本进程结束后才开始覆盖 exe。"""
+        try:
+            self._save_cfg()
+        except Exception:
+            pass
+        try:
+            self.s.stop()
+        except Exception:
+            pass
+        try:
+            timer = getattr(self, "_tick_timer", None)
+            if timer is not None:
+                self.root.after_cancel(timer)
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
 
     def _set_update_source(self):
         was_top = self.topmost
@@ -1906,6 +2179,8 @@ def main():
     global _CRASH_LOG
     _CRASH_LOG = _install_crash_log()
     _log("start frozen=%s admin=%s argv=%s" % (FROZEN, is_admin(), sys.argv))
+    _log("tk env HERE=%s TCL_LIBRARY=%s TK_LIBRARY=%s"
+         % (HERE, os.environ.get("TCL_LIBRARY"), os.environ.get("TK_LIBRARY")))
     # 开启 DPI 感知：否则在 125%/150% 缩放下窗口会被系统位图拉伸而变模糊
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -1928,7 +2203,20 @@ def main():
     sampler = Sampler(interval=1.5)
     sampler.start()
 
-    panel = Panel(sampler)
+    # 刚安装完立刻运行时，Tcl 脚本可能还没写完，表现为 “Can't find a usable
+    # tk.tcl”。每轮先补一次库路径再重试，比直接崩掉友好。
+    panel = None
+    for attempt in range(6):
+        if attempt:
+            _fix_tk_env(3.0)     # 安装器可能还在写文件，每轮补一次库路径
+        try:
+            panel = Panel(sampler)
+            break
+        except tk.TclError as exc:
+            _log("Tk init failed (attempt %d): %s" % (attempt + 1, exc))
+            if attempt == 5:
+                raise
+            time.sleep(1.5)
     _log("panel ready")
     try:
         panel.root.mainloop()

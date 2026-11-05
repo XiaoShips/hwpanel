@@ -3,12 +3,12 @@
 一个 Windows 桌面悬浮硬件监控面板：常驻置顶、可拖动、只读、不联网。
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20x64-blue)
-![release](https://img.shields.io/badge/release-v2.2.0-brightgreen)
+![release](https://img.shields.io/badge/release-v2.2.1-brightgreen)
 ![downloads](https://img.shields.io/github/downloads/XiaoShips/tempeek/total)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11-yellow)
 
-> 下载：[Releases](https://github.com/XiaoShips/tempeek/releases) 里的 `TempPeek-Setup-v2.2.0.exe`
+> 下载：[Releases](https://github.com/XiaoShips/tempeek/releases) 里的 `TempPeek-Setup-v2.2.1.exe`
 
 | 完整模式 | 迷你模式 |
 | :-: | :-: |
@@ -75,13 +75,28 @@
 
 ## 版本更新
 
-右键菜单 → **版本更新**：
+右键菜单 → **版本更新**。两种运行形态都能一键完成，不需要手动去 Releases 下载：
 
 - 默认更新源为本仓库（`XiaoShips/tempeek`），可在菜单里改成自己的 `owner/repo`；
 - 优先读仓库根目录的 `version.json`（无 API 限流），失败时回退到 Releases 最新 tag；
-- 下载后先做长度、内容、语法三重校验，再备份为 `tempeek.py.bak`、`os.replace` 原子替换；
-- 只替换主程序文件，**不会碰** `~/.tempeek.json`、启动器与图标；
-- 更新完成点「重启面板」即生效，`os.execv` 原地重启，不会产生第二个实例。
+- 候选地址依次尝试：`version.json` 里的 `zip` 字段 → 约定的 Release 资产 → Releases API，
+  任一处 404 会自动换下一个，不会一次失败就中断。
+
+**源码版**（`python tempeek.py`）：下载新的 `tempeek.py`，做长度、内容、语法三重校验，
+备份为 `tempeek.py.bak` 后 `os.replace` 原子替换。
+
+**安装版 / 便携版**（`TempPeek.exe`）：下载约 16 MB 的整包 zip → 解压到临时目录 →
+校验包内 `TempPeek.exe` 的 PE 头与体积 → 生成替换脚本 → 面板自动退出 → 覆盖安装目录 →
+自动重新启动。细节：
+
+- 正在运行的 exe 无法直接覆盖，脚本先把旧 exe 改名为 `TempPeek.exe.old` 再落新文件，
+  替换成功后删除 `.old`；
+- 只覆盖不删除：`unins000.exe` 等卸载器文件、你放进去的其它文件都不会被清掉；
+- 复制失败（文件仍被占用）会自动重试，最多约 80 秒；
+- 整个过程写日志到 `%TEMP%\tempeek-update.log`，替换脚本本身在 `%TEMP%\tempeek-update-*`；
+- 不碰 `~/.tempeek.json` 与快捷方式，更新后配置照旧。
+
+若安装目录不可写（例如装在 `Program Files` 但以非管理员运行），会提示先以管理员身份运行。
 
 ## 驱动与管理员权限
 
