@@ -1046,6 +1046,13 @@ class UpdateChecker:
         with urllib.request.urlopen(req, timeout=timeout or self.TIMEOUT) as resp:
             return resp.read()
 
+    def _latest_release(self):
+        try:
+            return json.loads(
+                self._http(UPDATE_API.format(repo=self.repo)).decode("utf-8"))
+        except Exception:
+            return None
+
     def check(self):
         """返回 (状态, 说明)：new / same / norepo / error。"""
         if not self.repo:
@@ -1073,22 +1080,30 @@ class UpdateChecker:
                     "file": str(data.get("file", SELF_FILE)),
                     "zip": str(data.get("zip", "")),
                 }
-                return ("new" if ver_newer(ver, APP_VER) else "same"), ver
+                if ver_newer(ver, APP_VER):
+                    return "new", ver
+                # raw.githubusercontent 有约 5 分钟的 CDN 缓存，刚发布的版本这里
+                # 可能还是旧值；用 Release 的 tag 再兜一次，别让用户查不到更新
+                rel = self._latest_release() or {}
+                tag = str(rel.get("tag_name") or "").strip()
+                if tag and ver_newer(tag, ver):
+                    self.info = {"version": tag, "date": "",
+                                 "changelog": str(rel.get("name") or ""),
+                                 "file": SELF_FILE, "zip": ""}
+                    return "new", tag
+                return "same", ver
             except Exception as exc:
                 last = exc
-        try:
-            d = json.loads(self._http(
-                UPDATE_API.format(repo=self.repo)).decode("utf-8"))
+        d = self._latest_release()
+        if d:
             ver = str(d.get("tag_name") or "").strip()
-            if not ver:
-                raise ValueError("无 release")
-            self.info = {"version": ver, "date": "",
-                         "changelog": str(d.get("name") or ""),
-                         "file": SELF_FILE}
-            return ("new" if ver_newer(ver, APP_VER) else "same"), ver
-        except Exception as exc2:
-            self.error = "清单:%s / Release:%s" % (last, exc2)
-            return "error", self.error
+            if ver:
+                self.info = {"version": ver, "date": "",
+                             "changelog": str(d.get("name") or ""),
+                             "file": SELF_FILE, "zip": ""}
+                return ("new" if ver_newer(ver, APP_VER) else "same"), ver
+        self.error = "清单:%s" % last
+        return "error", self.error
 
     # ── 安装版：整包下载 → 原地覆盖 → 自动重启 ──
     PKG_TIMEOUT = 150
@@ -1098,10 +1113,8 @@ class UpdateChecker:
         return [base % ("v" + ver), base % ver]
 
     def _api_zip_urls(self, ver):
-        try:
-            d = json.loads(self._http(
-                UPDATE_API.format(repo=self.repo)).decode("utf-8"))
-        except Exception:
+        d = self._latest_release()
+        if not d:
             return []
         if str(d.get("tag_name") or "").strip().lstrip("vV") != ver:
             return []        # latest 不是目标版本，宁可不更新也别装回旧版
@@ -1717,7 +1730,8 @@ class Panel:
 
     def _on_check(self, status, info, manual):
         if status == "new":
-            self.update_state = ("new", str(info))
+            ver_txt = str(info).lstrip("vV")      # Release tag 自带 v，别显示成 vv
+            self.update_state = ("new", ver_txt)
             detail = self.updater.info or {}
             changelog = detail.get("changelog") or "无更新说明"
             if FROZEN:
@@ -1725,20 +1739,20 @@ class Panel:
                        "是否立即下载并更新？\n"
                        "程序会下载整包（约 16 MB），覆盖安装目录里的文件，"
                        "然后自动重启。用户配置与快捷方式不受影响。"
-                       % (APP_VER, info, changelog))
+                       % (APP_VER, ver_txt, changelog))
                 if messagebox.askyesno("发现新版本", msg, parent=self.root):
                     self._do_pkg_update()
                 else:
-                    self._toast("发现新版本 " + str(info), C["yellow"])
+                    self._toast("发现新版本 " + ver_txt, C["yellow"])
                 return
             msg = ("当前版本 v%s\n最新版本 v%s\n\n%s\n\n"
                    "是否立即下载并更新？\n"
                    "更新前会备份为 tempeek.py.bak，完成后需重启面板。"
-                   % (APP_VER, info, changelog))
+                   % (APP_VER, ver_txt, changelog))
             if messagebox.askyesno("发现新版本", msg, parent=self.root):
                 self._do_update()
             else:
-                self._toast("发现新版本 " + str(info), C["yellow"])
+                self._toast("发现新版本 " + ver_txt, C["yellow"])
             return
         self.update_state = None
         if status == "same":

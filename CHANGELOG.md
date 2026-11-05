@@ -12,6 +12,9 @@
   Releases API 的 zip 资产（且校验 latest 的 tag 与目标版本一致，避免装回旧版）
 - 解压前拒绝含 `..` 或绝对路径的压缩包条目；解压后校验 `TempPeek.exe` 的 PE 头与体积
 - 替换日志写入 `%TEMP%\tempeek-update.log`，失败时可直接看 robocopy 的实际原因
+- `version.json` 走 raw CDN 有约 5 分钟缓存，刚发版时可能读到旧值；查到“已是最新”时
+  再用 Release tag 交叉确认一次，避免用户查不到刚发布的更新
+- 版本提示不再显示成 `vv2.2.1`（Release tag 自带 `v` 前缀）
 
 ### 修复
 
