@@ -8,13 +8,23 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![python](https://img.shields.io/badge/python-3.11-yellow)
 
-> 下载：[Releases](https://github.com/XiaoShips/tempeek/releases) 里的 `TempPeek-Setup-v2.2.1.exe`
+> 下载：[Releases](https://github.com/XiaoShips/tempeek/releases) 里的安装包 `TempPeek-Setup-v2.2.1.exe` 或便携版 `TempPeek-v2.2.1-portable.zip`
 
 | 完整模式 | 迷你模式 |
 | :-: | :-: |
 | ![完整模式](docs/screenshot-full.png) | ![迷你模式](docs/screenshot-mini.png) |
 
 面板上的数字全部来自本机硬件实时读数，不是演示数据（截图为 Dell G3 3590 实拍）。
+
+## 下载与运行
+
+去 [Releases](https://github.com/XiaoShips/tempeek/releases) 取对应版本（当前 v2.2.1），两种包功能完全一致：
+
+- **安装版（推荐日常使用）**：下载 `TempPeek-Setup-v2.2.1.exe`，一路下一步，装到 `C:\Program Files\TempPeek\`，桌面和开始菜单都会生成快捷方式，可设开机自启。
+- **便携版（免安装 / 绿色）**：下载 `TempPeek-v2.2.1-portable.zip`，解压后**根目录直接就是 `TempPeek.exe`**——双击即可运行，无需进入任何子文件夹，也不写注册表、不留卸载项；「卸载」就是直接删掉整个解压目录。适合 U 盘随身、临时机器或多用户共享。
+
+> 两种方式都只读取传感器数据、不联网（唯一联网动作是「检查更新」且只访问 GitHub）。
+> 便携版的路径里不要含中文或空格，否则部分驱动/提权逻辑可能异常。
 
 ## 功能
 

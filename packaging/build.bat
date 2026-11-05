@@ -18,6 +18,11 @@ if not exist "%ISCC%" (
 )
 
 "%ISCC%" packaging\installer.iss || exit /b 1
+
+rem 便携版（绿色免安装）：把 dist/TempPeek 的内容直接压到 zip 根，
+rem 解压后根目录即 TempPeek.exe，无需进入子文件夹。
+python packaging\zip_portable.py || exit /b 1
+
 echo.
-echo Built installer in the release folder.
+echo Built installer and portable zip in the release folder.
 pause
